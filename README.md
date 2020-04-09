@@ -1,31 +1,3 @@
-## Peers and Accounts
-
-RC(deployed by node0) address: 0x8980FC2bBD25958d0c72F5ba5fa3e5faF1A48c05
-
-JC(deployed by node0) address: 0x2C2Fb0DD2440e72318Fb018f923F78Ff86541D08
-
-ACC(deployed by lightnode1) address: 0xb29094a4DE9c2E22b598b39fE38860b9117340A6
-
-
-
-node0 account address：0xbffe4ff0cbd0a7590fb71966d1e6bb1a4c2359e0
-
-lightnode1 gateway account address：0x27b2e6492929683d6a60838526b942c80cec1327
-
-lightnode1 sensor account address：0x878866354d3d4ec38eed508a1bc6f8f2fd9d2211
-
-lightnode2 gateway account address：0xddc2f6498688fec01e170cd4423f9171294758b9
-
-lightnode2 thermostat account address：0xbd93271c5d2ccacdc307d1825614d5557ad6e0fd
-
-lightnode2 camera account address： 0x4185f786eb34e052823528c78ea13c937fe05ab2
-
-rpc port：22000
-
-websocket port：8545
-
-
-
 ## Deploy Result
 
 We deploy smart contracts using Truffle console. There is the result of the RC and JC.

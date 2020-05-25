@@ -1,91 +1,14 @@
-## Deploy Result
-
-We deploy smart contracts using Truffle console. There is the result of the RC and JC.
-
-```js
-Compiling your contracts...
-===========================
-> Everything is up to date, there is nothing to compile.
 
 
+系统中共有三种合约：管理合约（Management Contract, MC），访问控制合约（Access Control Contract, ACC），信誉合约（Reputation Contract, RC），相互间的调用关系如下图
 
-Starting migrations...
-======================
-> Network name:    'development'
-> Network id:      10
-> Block gas limit: 0xc454588d
+![合约架构](F:\static\images\README\合约架构.png)
 
+管理合约（Management Contract, MC），负责管理合约和设备属性。在设备属性中新增TimeofUnblock 字段，用于设置阻塞终止时间，该字段只能被信誉合约更新。MC中各种操作行为会产生日志并提交给信誉合约
 
-1_initial_migration.js
-======================
+访问控制合约（Access Control Contract，ACC），负责管理资源属性、策略和执行访问控制。在执行访问控制判断时，会首先从 MC 读取 TimeofUnblock 字段，查看是否大于当前时间，如果大于则阻塞请求，否则通过。同样，ACC 中的所有行为记录也会提交到 RC
 
-   Deploying 'Migrations'
-   ----------------------
-   > transaction hash:    0x5cbd3d61a95febd541079066f92ebabdafb03d707c6fef08ab01fc3303f23712
-   > Blocks: 0            Seconds: 4
-   > contract address:    0x4EC4F8BA5aEcA93955f67CFA58dbe4C57b21b37c
-   > block number:        542
-   > block timestamp:     0x5e09b9f0
-   > account:             0xbfFe4ff0cBd0A7590Fb71966D1E6bb1a4c2359e0
-   > balance:             99999999999999999999999999999998
-   > gas used:            263741
-   > gas price:           0 gwei
-   > value sent:          0 ETH
-   > total cost:          0 ETH
-
-
-   > Saving migration to chain.
-   > Saving artifacts
-   -------------------------------------
-   > Total cost:                   0 ETH
-
-
-2_deploy_contracts.js
-=====================
-
-   Deploying 'Register'
-   --------------------
-   > transaction hash:    0x427e37c5af7aae563bee7049e303b2040964d0860ebed1d10b5afbf997388506
-   > Blocks: 0            Seconds: 4
-   > contract address:    0x8980FC2bBD25958d0c72F5ba5fa3e5faF1A48c05
-   > block number:        544
-   > block timestamp:     0x5e09b9fa
-   > account:             0xbfFe4ff0cBd0A7590Fb71966D1E6bb1a4c2359e0
-   > balance:             99999999999999999999999999999998
-   > gas used:            3227930
-   > gas price:           0 gwei
-   > value sent:          0 ETH
-   > total cost:          0 ETH
-
-
-   Deploying 'Judge'
-   -----------------
-   > transaction hash:    0xd24c7912d95032da9a91e9711b1ae39dd90fcd1f03ac74eaf3d78d8723af7a65
-   > Blocks: 0            Seconds: 4
-   > contract address:    0x2C2Fb0DD2440e72318Fb018f923F78Ff86541D08
-   > block number:        545
-   > block timestamp:     0x5e09b9ff
-   > account:             0xbfFe4ff0cBd0A7590Fb71966D1E6bb1a4c2359e0
-   > balance:             99999999999999999999999999999998
-   > gas used:            1349320
-   > gas price:           0 gwei
-   > value sent:          0 ETH
-   > total cost:          0 ETH
-
-
-   > Saving migration to chain.
-   > Saving artifacts
-   -------------------------------------
-   > Total cost:                   0 ETH
-
-
-Summary
-=======
-> Total deployments:   3
-> Final cost:          0 ETH
-```
-
-
+信誉合约（Reputation Contract, RC），负责根据 MC 和 ACC 提交的记录计算信誉函数的值，并根据该值计算阻塞终止时间，最后调用 MC 的相关函数更新设备的 TimeofUnblock 字段。
 
 
 

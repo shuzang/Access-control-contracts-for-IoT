@@ -77,7 +77,7 @@ contract AccessControl {
     {
         require(
             msg.sender == manager,
-            "Only acc manager can update environment value!"
+            "updateEnviroment error: Only acc manager can update environment value!"
         );
         evAttr.minInterval = _minInterval;
         evAttr.threshold = _threshold;
@@ -88,11 +88,11 @@ contract AccessControl {
     function updateSCAddr(string memory scType, address _scAddress) public {
         require(
             msg.sender == manager,
-            "Only acc manager can update mc or rc address!"
+            "updateSCAddr error: Only acc manager can update mc or rc address!"
         );
         require(
             stringCompare(scType, "mc") || stringCompare(scType, "rc"),
-            "Updatable contract type can only be rc or mc!"
+            "updateSCAddr error: Updatable contract type can only be rc or mc!"
         );
         if (stringCompare(scType, "mc")) {
             mc = Management(_scAddress);
@@ -104,12 +104,9 @@ contract AccessControl {
     /* @dev updateManager update device manager, after that only new manager can operate this access control contract
     */
     function updateManager(address _manager) public {
-        if (msg.sender != manager) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal manager update request", now);
-        }
         require(
             msg.sender == manager,
-            "Only management contract can update manager address!"
+            "updateManager error: Only management contract can update manager address!"
         );
         manager = _manager;
         rc.reputationCompute(msg.sender, false, 2, "device manager update", now);
@@ -123,13 +120,10 @@ contract AccessControl {
         string memory _attrName,
         string memory _attrValue
     ) public {
-        if (msg.sender != manager || resources[_resource][_attrName].isValued) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal resource attribute add request", now);
-        }
-        require(msg.sender == manager, "Caller is not manager!");
+        require(msg.sender == manager, "addResourceAttr error: Caller is not manager!");
         require(
             !resources[_resource][_attrName].isValued,
-            "Resource attribute had been setted, pleased call resourceAttrUpdate!"
+            "addResourceAttr error: Resource attribute had been setted, pleased call resourceAttrUpdate!"
         );
         resources[_resource][_attrName].value = _attrValue;
         resources[_resource][_attrName].isValued = true;
@@ -143,13 +137,10 @@ contract AccessControl {
         string memory _attrName,
         string memory _attrValue
     ) public {
-        if (msg.sender != manager || !resources[_resource][_attrName].isValued) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal resource attribute update request", now);
-        }
-        require(msg.sender == manager, "Caller is not manager!");
+        require(msg.sender == manager, "updateResourceAttr error: Caller is not manager!");
         require(
             resources[_resource][_attrName].isValued,
-            "Resource attribute not exist, pleased first call addResourceAttr!"
+            "updateResourceAttr error: Resource attribute not exist, pleased first call addResourceAttr!"
         );
         resources[_resource][_attrName].value = _attrValue;
         rc.reputationCompute(msg.sender, false, 2, "Resource attribute update", now);
@@ -164,7 +155,7 @@ contract AccessControl {
     {
         require(
             resources[_resource][_attrName].isValued,
-            "Resource attribute not exist!"
+            "getResourceAttr error: Resource attribute not exist!"
         );
         _attrValue = resources[_resource][_attrName].value;
     }
@@ -175,13 +166,10 @@ contract AccessControl {
         string memory _resource,
         string memory _attrName
     ) public {
-        if (msg.sender != manager || !resources[_resource][_attrName].isValued) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal resource attribute delete request", now);
-        }
-        require(msg.sender == manager, "Caller is not manager!");
+        require(msg.sender == manager, "deleteResourceAttr error: Caller is not manager!");
         require(
             resources[_resource][_attrName].isValued,
-            "Resource attribute not exist, don't need delete!"
+            "deleteResourceAttr error: Resource attribute not exist, don't need delete!"
         );
         delete resources[_resource][_attrName];
         rc.reputationCompute(msg.sender, false, 3, "Resource attribute delete", now);
@@ -198,10 +186,7 @@ contract AccessControl {
         string memory _operator,
         string memory _attrValue
     ) public {
-        if (msg.sender != manager) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal policy add request", now);
-        }
-        require(msg.sender == manager, "Caller is not manager!");
+        require(msg.sender == manager, "addPolicy error: Caller is not manager!");
         policies[_resource][_action].push(
             PolicyItem(_attrOwner, _attrName, _operator, _attrValue)
         );
@@ -218,12 +203,12 @@ contract AccessControl {
         view
         returns (PolicyItem[] memory)
     {
-        require(policies[_resource][_action].length != 0, "There is no policy for this resource and action at this time!");
+        require(policies[_resource][_action].length != 0, "getPolicy error: There is no policy for this resource and action at this time!");
         PolicyItem[] memory result = new PolicyItem[](policies[_resource][_action].length);
         for (uint256 i = 0; i < policies[_resource][_action].length; i++) {
             result[i] = PolicyItem(
-                policies[_resource][_action][i].attrName,
                 policies[_resource][_action][i].attrOwner,
+                policies[_resource][_action][i].attrName,
                 policies[_resource][_action][i].operator,
                 policies[_resource][_action][i].attrValue);
         }
@@ -241,14 +226,14 @@ contract AccessControl {
         view
         returns (PolicyItem[] memory)
     {
-        require(policies[_resource][_action].length != 0, "There is no policy for this resource and action at this time!");
+        require(policies[_resource][_action].length != 0, "getPolicyItem error: There is no policy for this resource and action at this time!");
         PolicyItem[] memory result = new PolicyItem[](policies[_resource][_action].length);
         uint num = 0;
         for (uint256 i = 0; i < policies[_resource][_action].length; i++) {
             if (stringCompare(policies[_resource][_action][i].attrName, _attrName)) {
                 result[num] = PolicyItem(
-                    _attrName,
                     policies[_resource][_action][i].attrOwner,
+                    _attrName,
                     policies[_resource][_action][i].operator,
                     policies[_resource][_action][i].attrValue);
                 num++;
@@ -260,11 +245,8 @@ contract AccessControl {
     /* @dev deletePolicy delete the policy associate with resource and specified action
     */
     function deletePolicy(string memory _resource, string memory _action) public {
-        if (msg.sender != manager || policies[_resource][_action].length == 0) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal policy delete request", now);
-        }
-        require(msg.sender != manager, "Caller is not manager!");
-        require(policies[_resource][_action].length != 0, "There is no policy for this resource and action at this time!");
+        require(msg.sender == manager, "deletePolicy error: Caller is not manager!");
+        require(policies[_resource][_action].length != 0, "deletePolicy error: There is no policy for this resource and action at this time!");
         delete policies[_resource][_action];
         rc.reputationCompute(msg.sender, false, 3, "Policy delete", now);
     }
@@ -272,11 +254,8 @@ contract AccessControl {
     /* @dev deletePolicyItem delete the policy item associate with specified attribute name
     */
     function deletePolicyItem(string memory _resource, string memory _action, string memory _attrName) public {
-        if (msg.sender != manager || policies[_resource][_action].length == 0) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal policy delete request", now);
-        }
-        require(msg.sender != manager, "Caller is not manager!");
-        require(policies[_resource][_action].length != 0, "There is no policy for this resource and action at this time!");
+        require(msg.sender == manager, "deletePolicyItem error: Caller is not manager!");
+        require(policies[_resource][_action].length != 0, "deletePolicyItem error: There is no policy for this resource and action at this time!");
         for (uint256 i = 0; i < policies[_resource][_action].length; i++) {
             if (stringCompare(policies[_resource][_action][i].attrName, _attrName)) {
                 delete policies[_resource][_action][i];
@@ -307,7 +286,7 @@ contract AccessControl {
     */
     function accessControl(string memory _resource, string memory _action)
         public
-        returns (bool res)
+        returns (bool)
     {
         address subject = msg.sender;
         
@@ -318,30 +297,29 @@ contract AccessControl {
         string memory _attrValue;
         
         bool policycheck = true;
+        bool behaviorcheck = true;
+        uint8 errcode;
+        bool result;
         
-        if ((now - behaviors[subject].ToLR) <= evAttr.minInterval) {
-            behaviors[subject].NoFR++;
-            if (behaviors[subject].NoFR >= evAttr.threshold) {
-                rc.reputationCompute(subject, true, 3, "Too frequent access", now);
-                emit ReturnAccessResult(subject, false, "Too frequent access", now);
-                return false;
-            }
-        }else{
-            behaviors[subject].NoFR = 0;
-        }
-
-        // check time of block
         if (mc.getTimeofUnblock(subject) >= now) {
             //still blocked state
-            rc.reputationCompute(subject, true, 2, "Blocking end time not reached", now);
-            emit ReturnAccessResult(subject, false, "Blocking end time not reached", now);
-            return false;
+            errcode = 1; // Requests are blocked!
+        }else{
+            //unblocked state
+            if ((now - behaviors[subject].ToLR) <= evAttr.minInterval) {
+                behaviors[subject].NoFR++;
+                if (behaviors[subject].NoFR >= evAttr.threshold) {
+                    behaviorcheck = false;
+                }
+            }else{
+                behaviors[subject].NoFR = 0;
+            } 
         }
 
         //check policies
         for (uint256 i = 0; i < policies[_resource][_action].length; i++) {
-            _curAttrName = policies[_resource][_action][i].attrName;
             _curOwner = policies[_resource][_action][i].attrOwner;
+            _curAttrName = policies[_resource][_action][i].attrName;
             _curOperator = policies[_resource][_action][i].operator;
             _curAttrValue = policies[_resource][_action][i].attrValue;
 
@@ -364,16 +342,40 @@ contract AccessControl {
             if (stringCompare(_curOperator,"=") && (!stringCompare(_attrValue,_curAttrValue))) {
                 policycheck = false;
             }
-            if (policycheck = false) {
-                rc.reputationCompute(subject, true, 2, "Policy check failed", now);
-                emit ReturnAccessResult(subject, false, "Policy check failed", now);
-                return false;
-            }
         }
         
-        rc.reputationCompute(subject, false, 4, "Access authorized", now);
-        emit ReturnAccessResult(subject, true, "Access authorized", now);
-        return true;
+        if (policycheck && !behaviorcheck) errcode = 2; //Static check failed!
+        if (!policycheck && behaviorcheck) errcode = 3; //Misbehavior detected!
+        if (!policycheck && !behaviorcheck) errcode = 4; //Static check failed and Misbehavior detected
+        
+        behaviors[subject].ToLR = now;
+        result = policycheck && behaviorcheck;
+        
+        if (errcode == 0) {
+            rc.reputationCompute(subject, false, 3, "Access authorized", now);
+            emit ReturnAccessResult(subject, true, "Access authorized", now);
+        }
+        
+        if (errcode == 1) {
+            rc.reputationCompute(subject, true, 0, "Blocked end time not reached", now);
+            emit ReturnAccessResult(subject, false, "Blocked end time not reached", now);
+        }
+        
+        if (errcode == 2) {
+            rc.reputationCompute(subject, true, 1, "Too frequent access", now);
+            emit ReturnAccessResult(subject, false, "Too frequent access", now);
+        }
+        
+        if (errcode == 3) {
+            rc.reputationCompute(subject, true, 0, "Policy check failed", now);
+            emit ReturnAccessResult(subject, false, "Policy check failed", now);
+        }
+        
+        if (errcode == 4) {
+            rc.reputationCompute(subject, true, 1, "Policy check failed and Too frequent access", now);
+            emit ReturnAccessResult(subject, false, "Policy check failed and Too frequent access", now);
+        }
+        return result;
     }
 
     function deleteACC() public {
@@ -386,15 +388,14 @@ contract Reputation {
     function reputationCompute(
         address _subject, 
         bool _ismisbehavior,
-        uint _behaviorID,
+        uint8 _behaviorID,
         string memory _behavior,
-        uint  _time
+        uint256  _time
     ) public;
 }
 
 contract Management {
     function getTimeofUnblock(address _device) public returns (uint256);
     function getFixedAttribute (address _device, string memory _attrName) public view returns (string memory _attrValue);
-    function getDeviceRelatedAddress(address _device, string memory _attrName) public view returns (address _attrValue);
     function getCustomedAttribute(address _device, string memory _attrName) public view returns (string memory _attrValue);
 }

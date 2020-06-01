@@ -34,6 +34,7 @@ contract Management {
     */
     RContract public rct;
     mapping(address => Device)  internal LookupTable;
+    mapping(address => bool) internal isACCAddress; // judge if a address is a access control contract address, used by Reputation contract
     
     
     /**
@@ -67,12 +68,12 @@ contract Management {
         //duplicate unchecked
         require(
             !rct.isValued,
-            "Reputation contract already exist!"
+            "setRC error: Reputation contract already exist!"
         );
         
         require(
             msg.sender == owner || msg.sender == _creator,
-            "Only mc owner or rc creator can register!"
+            "setRC error: Only mc owner or rc creator can register!"
         );
         
         // register
@@ -88,13 +89,9 @@ contract Management {
     */
     function updateRC(address _rc) public {
         require(rct.isValued, "Reputation contract not exist!");
-        
-        if (msg.sender != owner && msg.sender != rct.scAddress) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal reputation contract update request", now);
-        }
         require(
             msg.sender == owner || msg.sender == rct.creator,
-            "Only mc owner or rc creator can update RC!"
+            "updateRC error: Only mc owner or rc creator can update RC!"
         );
 
         rct.scAddress = _rc;
@@ -112,17 +109,14 @@ contract Management {
         string memory _deviceRole)
         public
     {
-        if (LookupTable[_device].isValued || msg.sender != _manager) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal device registration request", now);
-        }
         require (
             !LookupTable[_device].isValued,
-            "device already registered"
+            "deviceRegister error: device already registered"
         );
         
         require(
             msg.sender == _manager,
-            "Only manager of device can register!"
+            "deviceRegister error: Only manager of device can register!"
         );
         
         LookupTable[_device].manager = _manager;
@@ -133,6 +127,7 @@ contract Management {
         LookupTable[_device].TimeofUnblock = 0;
         LookupTable[_device].isValued = true;
         //rc.reputationCompute(msg.sender, false, 1, "Device register", now ); //设备注册事件提交会触发阻塞时间更新的的回调，回调时设备未注册陷入死循环 
+        isACCAddress[_scAddress] = true;
     }
     
     /* @dev addAttribute add additional attribute to the device
@@ -143,17 +138,14 @@ contract Management {
         string memory _attrValue)
         public
     {
-        if (!LookupTable[_device].isValued || msg.sender != LookupTable[_device].manager || LookupTable[_device].customed[_attrName].isValued) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal attribute add request", now);
-        }
-        require(LookupTable[_device].isValued, "Device not registered!");
+        require(LookupTable[_device].isValued, "addAttribute error: Device not registered!");
         require (
             msg.sender == LookupTable[_device].manager,
-            "Only manager can add attribute!"
+            "add Attribute error: Only manager can add attribute!"
         );
         require(
             !LookupTable[_device].customed[_attrName].isValued,
-            "Attribute already exist!"
+            "add Attribute error: Attribute already exist!"
         );
         
         LookupTable[_device].customed[_attrName].value = _attrValue;
@@ -164,13 +156,10 @@ contract Management {
      /* @dev updateManager update the manager of device
     */
     function updateManager (address _device, address _newManager) public {
-        if (!LookupTable[_device].isValued || (msg.sender != owner && msg.sender != LookupTable[_device].manager)) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal device manager update request", now);
-        }
-        require(LookupTable[_device].isValued, "Device not registered!");
+        require(LookupTable[_device].isValued, "updateManager error: Device not registered!");
         require (
             msg.sender == owner || msg.sender == LookupTable[_device].manager,
-            "Only mc owner or device manager can update device manager!"
+            "updateManager error: Only mc owner or device manager can update device manager!"
         );
         LookupTable[_device].manager = _newManager;
         rc.reputationCompute(msg.sender, false, 2, "Device manager update", now);
@@ -184,17 +173,14 @@ contract Management {
         string memory _attrValue)
         public
     {
-        if (!LookupTable[_device].isValued || !LookupTable[_device].customed[_attrName].isValued) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal attribute update request", now);
-        }
-        require(LookupTable[_device].isValued, "Device not registered!");
+        require(LookupTable[_device].isValued, "updateAttribute error: Device not registered!");
         require (
             msg.sender == LookupTable[_device].manager,
-            "Only manager can update Attribute!"
+            "updateAttribute error: Only manager can update Attribute!"
         );
         require(
             LookupTable[_device].customed[_attrName].isValued,
-            "Attribute not exist!"
+            "updateAttribute error: Attribute not exist!"
         );
         LookupTable[_device].customed[_attrName].value = _attrValue;
         rc.reputationCompute(msg.sender, false, 2, "Device customed attribute update", now);
@@ -204,21 +190,18 @@ contract Management {
        @notice this fucntion only can be call by reputation contract
     */
     function updateTimeofUnblock(address _device, uint256 _TimeofUnblock) public {
-        if (msg.sender != rct.scAddress) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal unblocked time update request", now);
-        }
-        require(LookupTable[_device].isValued, "Device not registered!");
-        require(msg.sender == rct.scAddress, "Only reputation contract can update time of unblock!");
+        require(LookupTable[_device].isValued, "updateTimeofUnblock error: Device not registered!");
+        require(msg.sender == rct.scAddress, "updateTimeofUnblock error: Only reputation contract can update time of unblock!");
         LookupTable[_device].TimeofUnblock = _TimeofUnblock;
     }
     
     /* @getFixedAttribute get the fixed device attribute(type is string)
     */
     function getFixedAttribute (address _device, string memory _attrName) public view returns (string memory _attrValue) {
-        require(LookupTable[_device].isValued, "Device not registered!");
+        require(LookupTable[_device].isValued, "getFixedAttribute error: Device not registered!");
         require(
             stringCompare(_attrName, "deviceID") || stringCompare(_attrName,"deviceType") || stringCompare(_attrName,"deviceRole"),
-            "The attribute passed in is not a device fixed attribute, please check the spelling or call getCustomedAttribute()."
+            "getFixedAttribute error: The attribute passed in is not a device fixed attribute, please check the spelling or call getCustomedAttribute()."
         );
         if (stringCompare(_attrName, "deviceID")) {
             return LookupTable[_device].deviceID;
@@ -234,7 +217,7 @@ contract Management {
     /* @getDeviceRelatedAddress get the fixed device attribute(type is address)
     */
     function getDeviceRelatedAddress(address _device, string memory _attrName) public view returns (address _attrValue) {
-        require(LookupTable[_device].isValued, "Device not registered!");
+        require(LookupTable[_device].isValued, "getDeviceRelatedAddress error: Device not registered!");
         if (stringCompare(_attrName, "manager")) {
             return LookupTable[_device].manager;
         }
@@ -246,45 +229,49 @@ contract Management {
     /* @getCustomedAttribute get the customed attribute
     */
     function getCustomedAttribute(address _device, string memory _attrName) public view returns (string memory _attrValue) {
-        require(LookupTable[_device].isValued, "Device not registered!");
+        require(LookupTable[_device].isValued, "getCustomedAttribute error: Device not registered!");
         require(
             LookupTable[_device].customed[_attrName].isValued,
-            "Attribute not exist!"
+            "getCustomedAttribute error: Attribute not exist!"
         );
         return LookupTable[_device].customed[_attrName].value;
+    }
+    
+    function getTimeofUnblock(address _device) public view returns (uint256) {
+        require(LookupTable[_device].isValued, "getTimeofUnblock error: Device not registered!");
+        return LookupTable[_device].TimeofUnblock;
+    }
+    
+    function isContractAddress(address _scAddress) public view returns (bool) {
+        return isACCAddress[_scAddress];
     }
     
     /* @dev deleteDevice remove device from registered list
     */
     function deleteDevice(address _device) public {
-        if (!LookupTable[_device].isValued || msg.sender != LookupTable[_device].manager) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal device delete request", now);
-        }
-        require(LookupTable[_device].isValued, "Device not registered!");
+        require(LookupTable[_device].isValued, "deleteDevice error: Device not registered!");
         require (
             msg.sender == LookupTable[_device].manager,
-            "Only manager can remove device!"
+            "deleteDevice error: Only manager can remove device!"
         );
         delete LookupTable[_device];
+        delete isACCAddress[LookupTable[_device].scAddress];
         rc.reputationCompute(msg.sender, false, 3, "Device delete", now);
     }
     
     /* @dev deleteAttribute delete customed attribute
     */
     function deleteAttribute(address _device, string memory _attrName) public {
-        if (!LookupTable[_device].isValued || msg.sender != LookupTable[_device].manager || !LookupTable[_device].customed[_attrName].isValued) {
-            rc.reputationCompute(msg.sender, true, 1, "Illegal attribute delete request",now);
-        }
-        require(LookupTable[_device].isValued, "device not exist!");
+        require(LookupTable[_device].isValued, "deleteAttribute error: device not exist!");
         require (
             msg.sender == LookupTable[_device].manager,
-            "Only owner can delete attribute!"
+            "deleteAttribute error: Only owner can delete attribute!"
         );
         require (
             LookupTable[_device].customed[_attrName].isValued,
-            "Attribute not exist!"
+            "deleteAttribute error: Attribute not exist!"
         );
-        delete LookupTable[_device].customed[_attrName].value;
+        delete LookupTable[_device].customed[_attrName];
         rc.reputationCompute(msg.sender, false, 3, "Attribute delete", now);
     }
 }    
@@ -293,8 +280,8 @@ contract Reputation {
     function reputationCompute(
         address _subject, 
         bool _ismisbehavior,
-        uint _behaviorID,
+        uint8 _behaviorID,
         string memory _behavior,
-        uint  _time
+        uint256  _time
     ) public;
 }

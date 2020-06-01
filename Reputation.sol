@@ -6,25 +6,31 @@ contract Reputation {
     address public mcAddress;
     Management public mc;
     
-    event isCalled(address indexed _from, bool indexed _ismisbehavior, string indexed _behavior, uint _time, uint CrN, uint Tblocked, uint CrP, uint Treward);
+    event isCalled(address indexed _from, bool indexed _ismisbehavior, string indexed _behavior, uint _time, int Cr, uint Tblocked);
 
     struct BehaviorRecord {
-        uint[4] nbs; //Number of normal behaviors specified by behavior ID, ID-1 is array index
-        uint[] mbs1; //time of misbehaviors（other） ocured
-        uint[] mbs2; //time of misbehaviors（large number of requests in a short time） ocured
-        uint[] mbs3;
+        uint8 behaviorID;
+        string behavior;
+        uint  time;
+        uint8 currentWeight;
+    }
+    
+    struct Behaviors {
+        BehaviorRecord[] LegalBehaviors;
+        BehaviorRecord[] MisBehaviors;
+        uint begin; // begin index of legalBehaviors, when misbehaviors compute, this field recalculate
         uint TimeofUnblock; //End time of blocked (0 if unblocked, otherwise, blocked)
     }
     
     struct Environment {
-        uint[4] omega; 
-        uint[3] alpha; //penalty factor, index 0 is illegal attribute or policy action, index 1 is access failed, index 2 is large number of requests in a short time
-        uint gamma; //used for control misbehavior frequent
-        uint N;
+        uint8[4] omega; 
+        uint8[2] alpha; //penalty factor, index 0 is illegal attribute or policy action, index 1 is access failed, index 2 is large number of requests in a short time
+        uint8 CrPmax;
+        uint8 gamma;
     }
 
     //mapping devie address => Behavior recort for reputation compute
-    mapping(address => BehaviorRecord) public behaviors;
+    mapping(address => Behaviors) public behaviorsLookup;
     //some environment factors
     Environment public evAttr;
     
@@ -58,23 +64,22 @@ contract Reputation {
     /* @dev initEnvironment initial parameters of reputation function
     */
     function initEnvironment() internal {
-        evAttr.alpha[0] = 5; // can't use float in solidity, set 5 and when we use this number, we use 5/10
-        evAttr.alpha[1] = 5;
-        evAttr.alpha[2] = 10;
-        evAttr.gamma = 5;
-        evAttr.omega[0] = 5;
-        evAttr.omega[1] = 5;
-        evAttr.omega[2] = 5;
-        evAttr.omega[3] = 10;
-        evAttr.N = 10;
+        evAttr.alpha[0] = 1; // access control failed
+        evAttr.alpha[1] = 5; // Too frequent request
+        evAttr.omega[0] = 1;
+        evAttr.omega[1] = 1;
+        evAttr.omega[2] = 1;
+        evAttr.omega[3] = 2;
+        evAttr.CrPmax = 30;
+        evAttr.gamma = 0;
     }
     
     /* @ dev updateEnvironment update parameters of reputation function
     */
-    function updateEnvironment(string memory _name, uint index, uint value) public {
+    function updateEnvironment(string memory _name, uint256 index, uint8 value) public {
         require(
             msg.sender == owner,
-            "Only owner can update environment factors!"
+            "updateEnvironment error: Only owner can update environment factors!"
         );
         if (stringCompare(_name, "omega")) {
             evAttr.omega[index] = value;
@@ -82,11 +87,11 @@ contract Reputation {
         if (stringCompare(_name, "alpha")) {
             evAttr.alpha[index] = value;
         }
+        if (stringCompare(_name, "CrPmax")) {
+            evAttr.CrPmax = value;
+        }
         if (stringCompare(_name, "gamma")) {
             evAttr.gamma = value;
-        }
-        if (stringCompare(_name, "N")) {
-            evAttr.N = value;
         }
     }
 
@@ -96,69 +101,71 @@ contract Reputation {
     function reputationCompute(
         address _subject, 
         bool _ismisbehavior,
-        uint _behaviorID,
+        uint8 _behaviorID,
         string memory _behavior,
         uint  _time) 
         public 
     {
         require(
-            msg.sender == mc.getDeviceRelatedAddress(_subject, "scAddress") || msg.sender == mcAddress,
-            "only acc or mc can call function!"
+            mc.isContractAddress(msg.sender) || msg.sender == mcAddress,
+            "reputationCompute error: only acc or mc can call function!"
         );
+        
         uint CrN = 0;
         uint CrP = 0;
         uint Tblocked;
-        uint Treward;
-        uint i;
         
         if (_ismisbehavior) {
-            if (_behaviorID == 1) {
-                behaviors[_subject].mbs1.push(_time);
-            }else if (_behaviorID == 2) {
-                behaviors[_subject].mbs2.push(_time);
-            }else{
-                behaviors[_subject].mbs3.push(_time);
-            }
-            
-            for (i=0;i < behaviors[_subject].mbs1.length; i++) {
-                CrN = CrN + (evAttr.gamma / (_time - behaviors[_subject].mbs1[i])) * (evAttr.alpha[0]/10);
-            }
-            for (i=0;i < behaviors[_subject].mbs2.length; i++) {
-                CrN = CrN + (evAttr.gamma / (_time - behaviors[_subject].mbs2[i])) * (evAttr.alpha[1]/10);
-            }
-            for (i=0;i < behaviors[_subject].mbs3.length; i++) {
-                CrN = CrN + (evAttr.gamma / (_time - behaviors[_subject].mbs3[i])) * (evAttr.alpha[2]/10);
-            }
-            Tblocked = 2**CrN;
-            if (now > behaviors[_subject].TimeofUnblock) {
-                behaviors[_subject].TimeofUnblock = now + Tblocked;
-            }else{
-                behaviors[_subject].TimeofUnblock = behaviors[_subject].TimeofUnblock + Tblocked;
-            }
-            mc.updateTimeofUnblock(_subject,behaviors[_subject].TimeofUnblock);
+            behaviorsLookup[_subject].MisBehaviors.push(BehaviorRecord(_behaviorID, _behavior, _time, evAttr.alpha[_behaviorID]));
         }else{
-            behaviors[_subject].nbs[_behaviorID-1]++; 
-            if (now < behaviors[_subject].TimeofUnblock) {
-                for (i=0; i < 4; i++) {
-                    CrP = CrP + behaviors[_subject].nbs[i] * (evAttr.omega[i]/10);
-                }
-                //keep CrP less than evAttr.N, because Treward must Less than or equal to Tblocked
-                if (CrP > evAttr.N) {
-                    CrP = evAttr.N;
-                }
-                Treward = CrP / evAttr.N * (behaviors[_subject].TimeofUnblock - now);
-                behaviors[_subject].TimeofUnblock = behaviors[_subject].TimeofUnblock - Treward;
-                mc.updateTimeofUnblock(_subject,behaviors[_subject].TimeofUnblock);
-                for (i=0;i < 4; i++) {
-                    behaviors[_subject].nbs[i] = 0;
-                }
+            behaviorsLookup[_subject].LegalBehaviors.push(BehaviorRecord(_behaviorID, _behavior, _time, evAttr.omega[_behaviorID]));
+        }
+        
+        for (uint i=0;i < behaviorsLookup[_subject].MisBehaviors.length; i++) {
+            uint8 tmp = behaviorsLookup[_subject].MisBehaviors[i].currentWeight; 
+            CrN = CrN + tmp;
+            if (tmp > 1) {
+                behaviorsLookup[_subject].MisBehaviors[i].currentWeight = tmp - 1;
             }
         }
-        emit isCalled(_subject, _ismisbehavior, _behavior, _time, CrN, Tblocked, CrP, Treward);
+        
+        for (uint i=behaviorsLookup[_subject].begin; i < behaviorsLookup[_subject].LegalBehaviors.length; i++) {
+            CrP = CrP + behaviorsLookup[_subject].LegalBehaviors[i].currentWeight;
+        }
+
+        if ((now > behaviorsLookup[_subject].TimeofUnblock) && (int(CrP - CrN) < evAttr.gamma)) {
+            behaviorsLookup[_subject].begin = behaviorsLookup[_subject].LegalBehaviors.length-1;
+            Tblocked = 2**(CrN-CrP);
+            behaviorsLookup[_subject].TimeofUnblock = now + Tblocked;
+            mc.updateTimeofUnblock(_subject, behaviorsLookup[_subject].TimeofUnblock);
+        }
+        
+        emit isCalled(_subject, _ismisbehavior, _behavior, _time, int(CrP-CrN), Tblocked);
+    }
+    
+    /* @dev getLastBehavior get the latest behavior condition
+    */
+    function getLastBehavior(address _requester, uint8 _behaviorType) public view 
+        returns (uint _behaviorID, string memory _behavior, uint _time)
+    {
+        uint latest;
+        if (_behaviorType == 0) {
+            require(behaviorsLookup[_requester].LegalBehaviors.length > 0, "There is currently no legal behavior");
+            latest = behaviorsLookup[_requester].LegalBehaviors.length - 1;
+            _behaviorID = behaviorsLookup[_requester].LegalBehaviors[latest].behaviorID;
+            _behavior = behaviorsLookup[_requester].LegalBehaviors[latest].behavior;
+            _time = behaviorsLookup[_requester].LegalBehaviors[latest].time;
+        }else{
+            require(behaviorsLookup[_requester].MisBehaviors.length >= 0, "There is currently no misbehavior");
+            latest = behaviorsLookup[_requester].MisBehaviors.length - 1;
+            _behaviorID = behaviorsLookup[_requester].MisBehaviors[latest].behaviorID;
+            _behavior = behaviorsLookup[_requester].MisBehaviors[latest].behavior;
+            _time = behaviorsLookup[_requester].MisBehaviors[latest].time;
+        }
     }
 }
 
 contract Management {
-    function getDeviceRelatedAddress(address _device, string memory _attrName) public view returns (address _attrValue);
     function updateTimeofUnblock(address _device, uint256 _TimeofUnblock) public;
+    function isContractAddress(address _scAddress) public view returns (bool);
 }
